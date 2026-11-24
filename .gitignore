@@ -1,0 +1,17 @@
+# generated, never committed
+skills/roblox-horror-shorts/pipeline/models/
+skills/roblox-horror-shorts/pipeline/sfx/
+skills/roblox-horror-shorts/record/parkmouse
+__pycache__/
+.DS_Store
+.env
+*.env
+# story outputs
+projects/**/lines/
+projects/**/qa/
+*.rbxl
+*.rbxl.lock
+*.mp3
+*.wav
+*.mp4
+*.log

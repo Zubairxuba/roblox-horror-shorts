@@ -1,0 +1,25 @@
+{
+  "name": "roblox-horror-shorts",
+  "version": "0.1.0",
+  "description": "Story idea -> finished vertical animated horror Short filmed in Roblox Studio through the Roblox Studio MCP: script, voice, synced timeline, AI actors with moving faces and lip sync, automatic 9:16 camera with QA, screen-recorded take, SFX and upload notes.",
+  "license": "MIT",
+  "keywords": [
+    "roblox",
+    "roblox-studio",
+    "roblox-mcp",
+    "youtube-shorts",
+    "horror",
+    "animation",
+    "ai-video",
+    "text-to-video",
+    "faceless-channel",
+    "lip-sync",
+    "claude-code-skill"
+  ],
+  "author": {
+    "name": "Zubairxuba",
+    "url": "https://github.com/Zubairxuba"
+  },
+  "homepage": "https://github.com/Zubairxuba/roblox-horror-shorts",
+  "repository": "https://github.com/Zubairxuba/roblox-horror-shorts"
+}

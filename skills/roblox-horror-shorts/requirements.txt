@@ -1,0 +1,4 @@
+# Python side (voice, timing, QA). Roblox Studio runs the Luau kit.
+chatterbox-tts
+soundfile
+numpy

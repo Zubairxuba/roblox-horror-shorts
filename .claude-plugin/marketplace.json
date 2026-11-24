@@ -1,0 +1,11 @@
+{
+  "name": "roblox-horror-shorts",
+  "owner": { "name": "Zubairxuba" },
+  "plugins": [
+    {
+      "name": "roblox-horror-shorts",
+      "source": "./",
+      "description": "Story idea -> finished vertical animated horror Short, filmed in Roblox Studio through the Studio MCP."
+    }
+  ]
+}
