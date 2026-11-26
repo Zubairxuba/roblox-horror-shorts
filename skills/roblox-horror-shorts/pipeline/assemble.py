@@ -13,6 +13,9 @@ import finish as F  # noqa: E402
 from finish import SFX  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
+# the TAKE's camera log (rehearsals overwrite qa/camlog.txt: copy it to qa/camlog_take<N>.txt right after the take and
+# run with CAMLOG=qa/camlog_take<N>.txt); used for the [CAMVP] crop and the [REPLAN] blink fix
+CAMLOG = HERE / os.environ.get("CAMLOG", "qa/camlog.txt")
 FIN = HERE / "final"
 FPS, SR = 30, 48000
 shots = json.loads((HERE / "shots.json").read_text())
@@ -167,7 +170,7 @@ def crops(take):
                                     "-of", "csv=p=0", take], capture_output=True, text=True).stdout.strip().split(",")[:2])
     # Studio's Play-mode device toolbar ("Current device / Wifi / Auto") can sit on top of the viewport: the viewport is the BOTTOM
     # [CAMVP] h x2 rows of the take; crop the toolbar and the 2 px selection border off (the camera framed the strip for the viewport height)
-    log = HERE / "qa" / "camlog.txt"
+    log = CAMLOG
     m = re.search(r"\[CAMVP\] (\d+) (\d+)", log.read_text()) if log.exists() else None
     vh = int(m.group(2)) * 2 if m else H
     off = H - vh if H - vh > 8 else 0
@@ -234,8 +237,8 @@ def video():
     look = "vignette=PI/10,eq=contrast=1.04:saturation=1.05,format=yuv420p"   # no film grain: YouTube turns it into blotches
     # BLINK FIX: DirectorCam logs "[REPLAN] key cut=<s> t=<s>" when a shot's first frames aimed at a stale spot.
     # Replace those frames with the first good one (freezeframes), so nothing flashes at the cut.
-    log = FIN.parent / "qa" / "camlog.txt"   # written by DirectorCam v2 through the bridge
-    if not log.exists(): log = FIN.parent / "qa" / "camqa.txt"   # older projects: pasted Studio output
+    log = CAMLOG   # written by DirectorCam through the bridge
+    if not log.exists(): print(f"WARNING: no camera log at {log}: no toolbar crop or blink fix")
     fixes = []
     if log.exists():
         for cut, t in re.findall(r"\[REPLAN\] \S+ cut=([\d.]+) t=([\d.]+)", log.read_text()):

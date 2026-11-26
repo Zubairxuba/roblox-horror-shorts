@@ -4,7 +4,7 @@ POST /<path>  -> writes the request body to a .txt/.lua/.json file under roblox/
 Bound to 127.0.0.1 only. Rejects browser requests (any Origin header) and foreign Host names (DNS rebinding),
 so a web page cannot read your files or write scripts you later run."""
 import http.server, os, pathlib
-PORT = 8765
+PORT = int(os.environ.get("BRIDGE_PORT", "8765"))
 ROOT = pathlib.Path(os.environ.get("SHORTS_ROOT", ".")).resolve()
 HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
 WRITABLE = {".txt", ".lua", ".json"}
@@ -14,7 +14,8 @@ class H(http.server.SimpleHTTPRequestHandler):
 
     def target(self):
         """The resolved file path, or None (after a 403) if the request is not allowed."""
-        p = (ROOT / self.path.split("?")[0].lstrip("/")).resolve()
+        # the SAME path the handler serves (percent-decoded, ?/# stripped, normalised): checking the raw URL let ..%2F escape
+        p = pathlib.Path(self.translate_path(self.path)).resolve()
         ok = (self.headers.get("Host") in HOSTS and "Origin" not in self.headers
               and (p.is_relative_to(ROOT / "roblox") or p.is_relative_to(ROOT / "projects")))
         if not ok:
@@ -24,6 +25,9 @@ class H(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         if self.target(): super().do_GET()
+
+    def list_directory(self, path):   # no folder listings
+        self.send_error(403); return None
 
     def do_HEAD(self):
         if self.target(): super().do_HEAD()

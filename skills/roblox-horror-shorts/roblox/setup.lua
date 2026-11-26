@@ -20,6 +20,14 @@ put(SPS, "LocalScript", "DirectorCam", "DirectorCam.client.lua")
 for _, n in ipairs({"Cast", "Set", "FX"}) do
 	if not workspace:FindFirstChild(n) then local f = Instance.new("Folder"); f.Name = n; f.Parent = workspace end
 end
+-- an empty Timeline until the first video pushes its own (the Director and the camera require it when Play starts)
+if not RS:FindFirstChild("Timeline") then
+	local t = Instance.new("ModuleScript"); t.Name = "Timeline"
+	t.Source = "-- placeholder: replaced by each video's Timeline.lua\nreturn {FPS = 30, END = 0, shots = {}, beats = {}, ev = {}}"
+	t.Parent = RS
+end
+-- the Baseplate template's SpawnLocation sits at the origin, in the middle of the starter street (no player spawns anyway)
+for _, s in ipairs(workspace:GetChildren()) do if s:IsA("SpawnLocation") then s:Destroy() end end
 if not RS:FindFirstChild("Parts") then local f = Instance.new("Folder"); f.Name = "Parts"; f.Parent = RS end
 if not game:GetService("ServerStorage"):FindFirstChild("Props") then local f = Instance.new("Folder"); f.Name = "Props"; f.Parent = game:GetService("ServerStorage") end
 -- light effects the mood looks (K.look) drive

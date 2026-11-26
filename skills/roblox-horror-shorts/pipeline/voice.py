@@ -5,6 +5,7 @@ usage: python pipeline/voice.py <story_dir> --ref my_voice.wav [--exaggeration 0
 Pace: Chatterbox's silence around each line is trimmed, lines are joined with a short pause and the whole track is sped up
 1.25x (ffmpeg rubberband keeps the pitch and formants; atempo if your ffmpeg has no rubberband): ~4.5 words/s, like top Shorts.
 Per-line voice / emotion: optional <story_dir>/voices.json = {"7": {"ref": "kid.wav", "exaggeration": 0.95}, ...}
+(a "ref" path is relative to <story_dir>; an absolute path also works)
 (line numbers count non-empty script lines; calm ~0.4, scared/shouting >= 0.9). One voice per character.
 script.txt: one line per shot; *asterisks* are stripped before speaking. Each spoken line is cached in <story_dir>/lines/
 by its text + settings, so after editing script.txt (and deleting narration.mp3) only changed lines are re-voiced.
@@ -48,7 +49,7 @@ parts, timings, t, sr = [], [], 0.0, 24000
 lines = [l.replace("*", "").strip() for l in (d / "script.txt").read_text().splitlines()]
 for n, line in enumerate((l for l in lines if l), 1):
     over = per_line.get(str(n), {})
-    ref = Path(over.get("ref", a.ref))
+    ref = d / over["ref"] if "ref" in over else a.ref   # a voices.json ref is relative to the story folder
     c = cfg | {k: v for k, v in over.items() if k != "ref"} | {"ref": sha(ref)}
     f = cache / (hashlib.sha1((line + json.dumps(c, sort_keys=True)).encode()).hexdigest()[:12] + ".wav")
     if not f.exists():
