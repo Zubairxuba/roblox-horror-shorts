@@ -47,7 +47,7 @@ in Luau, rehearses, films the take, and mixes the sound and an original score.
   or the screen is locked, and deletes the take if any other app comes to the front.
 - **Sound:** your own licensed library or synthesized effects on event frames, an original score written in code and
   ducked under the voice, and a -14 LUFS mix. Roblox audio is never used.
-- **Ready to upload:** a 1440x2560 Short with one-word captions, plus `upload.txt` (title + emoji, teaser line, tags,
+- **Ready to upload:** a 1440x2560 Short (one-word captions optional), plus `upload.txt` (title + emoji, teaser line, tags,
   category).
 
 ## How it works
@@ -77,7 +77,7 @@ Or copy just the skill: `cp -r skills/roblox-horror-shorts ~/.claude/skills/`
 - **macOS** for the hands-free recorder: `ffmpeg` with avfoundation + `h264_videotoolbox`, and `swiftc` (Xcode
   command line tools) for the mouse parker. Other platforms: record the viewport your own way and keep the white sync
   flash.
-- **ffmpeg** with `libass` for the captions (plain Homebrew ffmpeg lacks it: `brew install ffmpeg-full` and set
+- **ffmpeg** with `libass` for the optional captions (plain Homebrew ffmpeg lacks it: `brew install ffmpeg-full` and set
   `FFMPEG=/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg`; the `rubberband` filter is optional, else `atempo` is used) and
   [whisper.cpp](https://github.com/ggml-org/whisper.cpp) `whisper-cli` with `ggml-base.en.bin` (set `WHISPER_MODEL`).
 - **Python 3.10+:** `pip install -r skills/roblox-horror-shorts/requirements.txt`.

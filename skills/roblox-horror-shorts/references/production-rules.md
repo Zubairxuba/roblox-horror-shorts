@@ -44,8 +44,8 @@ and on top Roblox story Shorts. When two rules seem to conflict, the one in a nu
    board. Crowds of extras in wides and the cold open when the story has people around. Never ball-shaped trees,
    SmoothPlastic ground or a flat blue backdrop. Still: the line from the camera to the speaking actor stays clear, and
    every close shot keeps a readable face. List the Set pieces a story uses in `SET_KEEP`; the Director hides the rest.
-5. **One-word captions** in the lower middle of the 9:16 frame, one spoken word at a time, numbers coloured
-   (`assemble.py video` burns them in from words_full.json).
+5. **No burned-in captions by default:** the creator adds captions in their editor. Optional: `CAPTIONS=1 assemble.py video`
+   burns one-word captions (lower middle, one word at a time, numbers coloured) from words_full.json.
 
 ## 3. Cast: classic blocky avatars with bold drawn faces (standard)
 - **Build:** `roblox/cast_classic.lua` builds the starter cast from Roblox catalog items: R15 blocky bodies, textured
@@ -145,7 +145,7 @@ Code: `Framer.lua` (shot maths) + `DirectorCam.client.lua` (driver).
   timeline has `heart_on`/`heart_off`, the score must not play its own pulse there (two heartbeats at once).
 
 ## 8. Delivery
-- `Finalized_videos/<Title>/`: `full_video.mp4` (9:16 1440x2560, voice + SFX + captions), `full_video_with_music.mp4`,
+- `Finalized_videos/<Title>/`: `full_video.mp4` (9:16 1440x2560, voice + SFX, no captions), `full_video_with_music.mp4`,
   `background_music.mp3` (the score), `upload.txt`.
 - **Title:** 2-3 words, Title Case + ONE emoji of the object ("The Lost Glove 🧤"), or a short rule teaser under 40
   characters ("Keep your light on... 💡"). No hashtags in the title. Give each of the 3 premises its title.

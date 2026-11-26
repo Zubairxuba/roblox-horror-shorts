@@ -1,6 +1,6 @@
 ---
 name: roblox-horror-shorts
-description: Turn a story idea into a finished vertical (9:16) animated horror Short under 2 minutes, filmed in Roblox Studio through the Roblox Studio MCP - hook-first script with a lint, voice, one synced timeline for picture and sound, classic blocky actors with bold drawn faces, a textured starter set, an automatic cinematic camera with QA, a rehearsal review, a guarded screen-recorded take, synthesized SFX, an original score, one-word captions and upload notes. Use for "make a Roblox horror short", "Roblox story animation", "animated Roblox Short", or continuing a project made with this skill.
+description: Turn a story idea into a finished vertical (9:16) animated horror Short under 2 minutes, filmed in Roblox Studio through the Roblox Studio MCP - hook-first script with a lint, voice, one synced timeline for picture and sound, classic blocky actors with bold drawn faces, a textured starter set, an automatic cinematic camera with QA, a rehearsal review, a guarded screen-recorded take, synthesized SFX, an original score, optional one-word captions and upload notes. Use for "make a Roblox horror short", "Roblox story animation", "animated Roblox Short", or continuing a project made with this skill.
 license: MIT
 ---
 
@@ -136,8 +136,8 @@ in the background). Afterwards grep the Studio output for "403" (invalid take), 
 
 ## 7. Sound, video, delivery
 `python assemble.py audio` (voice polish, SFX on event frames from `SFX_LIBRARY` or synthesized, -14 LUFS),
-`CAMLOG=qa/camlog_take1.txt python assemble.py video` (finds the white sync flash, trims, cuts the 9:16 strip at 1440x2560, burns one-word
-captions, fixes re-aim blinks), then check sync: scene-cut times vs beats.json, median within +-0.05 s (else set
+`CAMLOG=qa/camlog_take1.txt python assemble.py video` (finds the white sync flash, trims, cuts the 9:16 strip at 1440x2560, fixes re-aim
+blinks; `CAPTIONS=1` also burns one-word captions), then check sync: scene-cut times vs beats.json, median within +-0.05 s (else set
 `SYNC_LAG` and re-run). `python score.py` (rewrite its ARRANGEMENT for the story) and `python assemble.py music`.
 Deliver to `Finalized_videos/<Title>/`: `full_video.mp4`, `full_video_with_music.mp4`, `background_music.mp3` (copy of
 `final/score.mp3`) and `upload.txt` (title + one emoji, one-line teaser description, tags, category Gaming / Roblox;

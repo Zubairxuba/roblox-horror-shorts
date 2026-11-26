@@ -2,7 +2,7 @@
 
   assemble.py audio   # events.json -> SFX (Sonniss library if present, else synthesized) + polished voice -> final/full_audio.wav
   assemble.py video   # final/take.mp4 (screen recording, starts black, one white sync flash 0.5 s before t=0) -> full_video.mp4
-                      # (one-word captions burned in from words_full.json; CAPTIONS=0 to skip)
+                      # (no captions by default; CAPTIONS=1 burns one-word captions in from words_full.json)
   assemble.py music   # full_video.mp4 + final/score.wav (score.py) -> full_video_with_music.mp4, score ducked under the voice
 """
 import json, os, re, subprocess, sys
@@ -227,7 +227,7 @@ SYNC_LAG = float(os.environ.get("SYNC_LAG", "0.40"))
 
 def video():
     take = FIN / "take.mp4"
-    cap = captions() if os.environ.get("CAPTIONS", "1") != "0" else None
+    cap = captions() if os.environ.get("CAPTIONS", "0") == "1" else None   # off by default: most creators add captions in their editor
     if cap and " ass " not in subprocess.run([F.FF, "-hide_banner", "-filters"], capture_output=True, text=True).stdout:
         print("WARNING: captions skipped: this ffmpeg has no libass. Install one that has it (macOS: brew install ffmpeg-full) "
               "and set FFMPEG=/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg, then re-run video.")
