@@ -1,5 +1,5 @@
 #!/bin/bash
-# usage: strip_sheet.sh <video> <out.png> <start_s> <step_s> <count> [cols]   (9:16 centre strip of every step_s, tiled)
+# usage: strip_sheet.sh <video> <out.png> <start_s> <step_s> <count> [cols]   (9:16 centre strip of every step_s, tiled; needs drawtext: FFMPEG=ffmpeg-full)
 V="$1"; OUT="$2"; S="$3"; STEP="$4"; N="$5"; COLS="${6:-9}"
 W=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "$V")
 H=${W#*,}; W=${W%,*}; SW=$(( H*9/16 )); X=$(( (W-SW)/2 ))

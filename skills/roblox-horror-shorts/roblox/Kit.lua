@@ -4,8 +4,8 @@ local Lighting = game:GetService("Lighting")
 local K = {}
 
 K.ANIM = {sit = 2506281703, idle = 507766388, walk = 507777826, wave = 507770239, point = 507770453, run = 507767714, cheer = 507770677, laugh = 507770818}
--- ACTION LIBRARY: official Roblox emotes (catalog emote -> InsertService:LoadAsset -> AnimationId).
--- Story actions they can't do: generate_animation on the rig, then add the id to K.ANIM. No character beat is just idle.
+-- ACTION LIBRARY (3h): official Roblox emotes (catalog emote -> InsertService:LoadAsset -> AnimationId, resolved 2026-11-22).
+-- generate_animation failed twice in Studio, so these are the acting set. No character beat is just idle.
 for k, id in pairs({agree = 10713954623, disagree = 10714065135, applaud = 10713966026, beckon = 10713984554, bored = 10713992055,
 	celebrate = 10714016223, confused = 4940561610, cower = 4940563117, curtsy = 10714061912, dizzy = 10714066964, getout = 10714345862,
 	haha = 10714350889, happy = 10714352626, hello = 10714359093, herolanding = 10714360164, highwave = 10714362852, jumpcheer = 5895324424,
@@ -24,7 +24,7 @@ K.FACES = {
 	worried = {LeftInnerBrowRaiser = 1, RightInnerBrowRaiser = 1, Corrugator = 0.6, LipPresser = 0.5, LeftLipCornerDown = 0.5, RightLipCornerDown = 0.5},
 	stare = {LeftEyeUpperLidRaiser = 0.6, RightEyeUpperLidRaiser = 0.6, LipsTogether = 0.5},
 	suspicious = {LeftBrowLowerer = 0.7, RightBrowLowerer = 0.7, LeftEyeClosed = 0.3, RightEyeClosed = 0.3, MouthLeft = 0.3},
-	-- the villain's wide grin, a vacant stare, the eyebrow-wiggle joker
+	-- 2026-11-24 (Roll Call): the villain's wide grin, a vacant stare (the name-thief victim), the eyebrow-wiggle joker
 	grin = {JawDrop = 0.3, LeftLipCornerPuller = 1, RightLipCornerPuller = 1, LeftCheekRaiser = 1, RightCheekRaiser = 1, LeftLipStretcher = 0.5, RightLipStretcher = 0.5},
 	blank = {LeftEyeClosed = 0.4, RightEyeClosed = 0.4, LipsTogether = 0.4, LeftLipCornerDown = 0.2, RightLipCornerDown = 0.2},
 	brows = {LeftOuterBrowRaiser = 1, RightOuterBrowRaiser = 1, LeftInnerBrowRaiser = 0.7, RightInnerBrowRaiser = 0.7, LeftLipCornerPuller = 0.9, RightLipCornerPuller = 0.9, LeftCheekRaiser = 0.6, RightCheekRaiser = 0.6},
@@ -37,6 +37,13 @@ function K.actor(name) return workspace.Cast:FindFirstChild(name) end
 K.FACE_IMG = {neutral = 7074780, smile = 209713384, laugh = 16132434, glee = 7074712, scared = 7699096, shocked = 7317691,
 	worried = 9250431, uhoh = 7074932, sad = 8560912, cry = 8560912, stare = 8560915, suspicious = 31117192, smirk = 7317606,
 	awkward = 23931977, grimace = 20418518, angry = 7076211, sleepy = 161124757, creepy = 629906620, hypno = 10747392}
+-- open-mouth partner of each face for the talking flap (default: laugh). Scary faces open to the O mouth.
+K.OPEN_FACE = {}
+K.OPEN_FACE[K.FACE_IMG.scared] = K.FACE_IMG.shocked; K.OPEN_FACE[K.FACE_IMG.worried] = K.FACE_IMG.uhoh
+K.OPEN_FACE[K.FACE_IMG.uhoh] = K.FACE_IMG.shocked; K.OPEN_FACE[K.FACE_IMG.shocked] = K.FACE_IMG.uhoh
+K.OPEN_FACE[K.FACE_IMG.angry] = K.FACE_IMG.grimace; K.OPEN_FACE[K.FACE_IMG.sad] = K.FACE_IMG.uhoh
+-- serious faces must not flap to the default laugh (The Carousel review: an angry accusation read as a happy grin)
+K.OPEN_FACE[K.FACE_IMG.suspicious] = K.FACE_IMG.angry; K.OPEN_FACE[K.FACE_IMG.stare] = K.FACE_IMG.uhoh; K.OPEN_FACE[K.FACE_IMG.awkward] = K.FACE_IMG.uhoh
 -- give a rig a classic head (the dynamic mesh head is hidden; hair/hats stay attached to it)
 function K.classicHead(m, preset)
 	local h = m:FindFirstChild("Head"); if not h then return end
@@ -54,7 +61,8 @@ function K.classicHead(m, preset)
 		local w = Instance.new("WeldConstraint"); w.Part0 = h; w.Part1 = c; w.Parent = c
 		c.Parent = m
 	end
-	c.face.Texture = "rbxassetid://" .. (K.FACE_IMG[preset or "neutral"] or K.FACE_IMG.neutral)
+	local id = K.FACE_IMG[preset or "neutral"] or K.FACE_IMG.neutral
+	c.face.Texture = "rbxassetid://" .. id; c:SetAttribute("Base", id)   -- Base: the face the client restores after the talking flap
 	return c
 end
 
@@ -97,17 +105,18 @@ function K.place(name, pos, lookAt)
 	local at = Vector3.new(pos.X, y + hip, pos.Z)
 	local look = lookAt and Vector3.new(lookAt.X, at.Y, lookAt.Z) or (at + Vector3.new(0, 0, -1))
 	if (look - at).Magnitude < 0.01 then look = at + Vector3.new(0, 0, -1) end
-	m:PivotTo(CFrame.lookAt(at, look))
+	-- place the ROOT at `at` (AI-cast models have the pivot ~2.4 studs below the root: they spawned 2.4 high and visibly dropped at every cut)
+	m:PivotTo(CFrame.lookAt(at, look) * rootOf(m).CFrame:ToObjectSpace(m:GetPivot()))
 	-- actors parked offstage can sit in FallingDown; unanchored like that they topple over in the scene
 	hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
 	hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
 	local r = rootOf(m); r.AssemblyLinearVelocity = Vector3.zero; r.AssemblyAngularVelocity = Vector3.zero
-	-- the whole body, not just the root: anchored limbs pin the actor in place and K.walk does nothing
+	-- the whole body, not just the root: anchored limbs (Sam, Juno, Mia, Extra in the place, 2026-11-23) pin the actor in place and K.walk does nothing
 	for _, d in ipairs(m:GetDescendants()) do if d:IsA("BasePart") then d.Anchored = false end end
 	hum:ChangeState(Enum.HumanoidStateType.Running)
 	pcall(function() r:SetNetworkOwner(nil) end)
 	hum:MoveTo(at) -- cancel any old walk target
-	do -- IMPROVEMENT 2026-11-23: in Play the dynamic Head came back visible and its own face showed through the drawn one
+	do -- IMPROVEMENT 2026-11-23: in Play the dynamic Head came back visible and its own face showed through the drawn one (the pale kid's scowl, Leo's double marks)
 		local ch, hd = m:FindFirstChild("ClassicHead"), m:FindFirstChild("Head")
 		if ch and hd then hd.Transparency = 1; for _, d in ipairs(hd:GetChildren()) do if d:IsA("Decal") or d:IsA("Texture") then d.Transparency = 1 end end end
 	end
@@ -122,7 +131,7 @@ function K.show(name, on)
 	end
 end
 
--- real (sun) shadow on/off.
+-- real (sun) shadow on/off. Milo never has one.
 function K.castShadow(name, on)
 	for _, d in ipairs(K.actor(name):GetDescendants()) do if d:IsA("BasePart") then d.CastShadow = on end end
 end
@@ -138,9 +147,20 @@ K.PACKS = {
 	zombie   = {idle = 616158929, walk = 616168032},
 }
 local LOCO = {idle = true, walk = true, run = true}
+-- fix (2026-11-26): no arm-raising acting on an actor the camera frames close in that line (it covered Mom's face). Director fills K.closeBy.
+K.ARM_ANIMS = {wave = true, highwave = true, hello = true, cheer = true, celebrate = true, jumpcheer = true, salute = true, applaud = true, agree = true, point = true,
+	point2 = true, louder = true, cower = true, shrug = true, haha = true, beckon = true, getout = true, tantrum = true, herolanding = true, zombie = true}
+K.ARM_POSES = {holdup = true, reach = true, grab = true, shove = true, tie = true}
+local function hidesFace(name, which, set)
+	local c = K.closeBy and K.closeBy[K.line]
+	if c and c[name] and set[which] then print("[ARMGUARD] line " .. K.line .. " " .. name .. " " .. which .. " skipped (close shot)"); return true end
+	return false
+end
 local tracks, current = {}, {}
 function K.anim(name, which, fade, looped)
+	if hidesFace(name, which, K.ARM_ANIMS) then return end
 	local m = K.actor(name)
+	if m:GetAttribute("Sitting") and which ~= "sit" and not LOCO[which] then return end   -- walk/run must pass: K.walk needs the track   -- an emote on a seated actor threw them off the seat (2026-11-26)
 	tracks[m] = tracks[m] or {}
 	local t = tracks[m][which]
 	if not t then
@@ -164,7 +184,7 @@ function K.anim(name, which, fade, looped)
 	return t
 end
 
--- IMPROVEMENT 2026-11-23 (backlog #1 acting): every placed actor FIDGETS while idle (shrug, tilt, nod...) so no shot is a frozen pose.
+-- IMPROVEMENT 2026-11-23 (acting): every placed actor FIDGETS while idle (shrug, tilt, nod...) so no shot is a frozen pose.
 -- Stops by itself when the line changes (the next setup re-places the actor) or when a held action / walk replaces idle.
 K.FIDGET = {"shrug", "tilt", "agree", "disagree"}
 local fidgetTok = {}
@@ -175,7 +195,8 @@ function K.fidget(name, pool)
 	task.spawn(function()
 		task.wait(0.3 + math.random() * 0.8)
 		while fidgetTok[m] == tok and K.line == line0 and m.Parent do
-			if (current[m] == "idle" or current[m] == nil) and m:GetAttribute("Sitting") == nil then
+			local inClose = K.closeBy and K.closeBy[line0] and K.closeBy[line0][name]   -- a fidgeting arm in a close-up covers the face
+			if not inClose and (current[m] == "idle" or current[m] == nil) and m:GetAttribute("Sitting") == nil then
 				local list = pool or K.FIDGET
 				K.anim(name, list[math.random(#list)], 0.25)
 			end
@@ -185,7 +206,7 @@ function K.fidget(name, pool)
 end
 function K.noFidget(name) local m = K.actor(name); if m then fidgetTok[m] = nil end end
 
--- POSE LIBRARY (2026-11-23, backlog #1 acting): story poses the emotes cannot do, set per joint on the CLIENT after the Animator
+-- POSE LIBRARY (2026-11-23, acting): story poses the emotes cannot do, set per joint on the CLIENT after the Animator
 -- (joint.Transform in PreSimulation; works on AnimationConstraint and Motor6D rigs, tested in Play). The server only sets attributes.
 -- Angles: shoulder/hip +X swings the limb FORWARD; elbow +X bends the forearm forward; knee -X bends back; waist +X leans BACK,
 -- -X leans forward; neck -X looks down; left-arm -Z / right-arm +Z = outward.
@@ -199,15 +220,36 @@ K.POSES = {
 	shove    = {LeftShoulder = A(90, 0, 4), RightShoulder = A(90, 0, -4), LeftElbow = A(4), RightElbow = A(4), Waist = A(-15),
 	            LeftHip = A(16), RightHip = A(-20)},                                                                                  -- both arms straight out, leaning in
 	flinch   = {LeftShoulder = A(60, 0, -34), RightShoulder = A(60, 0, 34), LeftElbow = A(110), RightElbow = A(110), Waist = A(12), Neck = A(-14)},   -- arms up in front of the face
-	holdup   = {RightShoulder = A(95, 0, -12), RightElbow = A(70), Neck = A(-6)},                                                      -- right hand raised in front to show an item (a key, a note)
-	stiff    = {LeftShoulder = A(0, 0, -6), RightShoulder = A(0, 0, 6), Neck = A(0, 0, 14), Waist = A(-4, 0, 3)},                    -- arms dead straight, head tilted: the uncanny copy
+	holdup   = {RightShoulder = A(95, 0, -12), RightElbow = A(70), Neck = A(-6)},                                                      -- right hand raised in front to show an item (the key, the tag)  [added 2026-11-23, The Spare Key]
+	stiff    = {LeftShoulder = A(0, 0, -6), RightShoulder = A(0, 0, 6), Neck = A(0, 0, 14), Waist = A(-4, 0, 3)},                    -- arms dead straight, head tilted: the uncanny copy  [added 2026-11-23]
 	lookback = {Waist = A(0, 32, 0), Neck = A(0, 38, 0)},
-	straight = {LeftShoulder = A(0, 0, 30), RightShoulder = A(0, 0, -30), LeftElbow = A(8), RightElbow = A(8)},                          -- arms hang at the sides (the AI rigs' A-pose rest holds them out)
-	handup   = {RightShoulder = A(168, 0, -6), RightElbow = A(6), Neck = A(-4)},                                                     -- right arm straight up: "here!" / a raised hand                                                                         -- turns to look over the shoulder
+	tie      = {Waist = A(-58), LeftShoulder = A(40), RightShoulder = A(40), LeftElbow = A(30), RightElbow = A(30), Neck = A(22)},        -- bent over tying a shoe  [added 2026-11-24, The Fourth Bell]
+	grab     = {LeftShoulder = A(172, 0, 4), RightShoulder = A(172, 0, -4), LeftElbow = A(8), RightElbow = A(8), Neck = A(-6)},          -- both arms straight up, gripping a rope  [added 2026-11-24, The Fourth Bell]
+	carry    = {LeftShoulder = A(48, 0, -6), RightShoulder = A(48, 0, 6), LeftElbow = A(36, 0, 0), RightElbow = A(36, 0, 0), Neck = A(-4)},     -- both hands forward at the waist, carrying a tray or a cake  [2026-11-25]
+	sleeves  = {LeftShoulder = A(20, 0, 16), LeftElbow = A(58, 0, 34), RightShoulder = A(24, 0, -20), RightElbow = A(64, 0, -38)},   -- hands meet at the chest: rolling up a sleeve  [2026-11-26]
+	shakeL   = {Neck = A(0, 30, 0)}, shakeR = {Neck = A(0, -30, 0)},   -- alternate them for a head shake on a seated actor  [2026-11-26]
+	-- The Carousel (2026-11-26)
+	ride     = {LeftShoulder = A(52, 0, -8), RightShoulder = A(52, 0, 8), LeftElbow = A(34), RightElbow = A(34), LeftHip = A(62, 0, -28), RightHip = A(62, 0, 28),
+	            LeftKnee = A(-52), RightKnee = A(-52), Waist = A(-6)},                                                              -- astride a carousel horse, hands on the pole
+	ridestiff = {LeftShoulder = A(52, 0, -8), RightShoulder = A(52, 0, 8), LeftElbow = A(34), RightElbow = A(34), LeftHip = A(84, 0, -24), RightHip = A(84, 0, 24),
+	            LeftKnee = A(0), RightKnee = A(0), Waist = A(0)},                                                                   -- the legs stop bending
+	ridereach = {RightShoulder = A(96, 0, 38), RightElbow = A(4), LeftShoulder = A(52, 0, -8), LeftElbow = A(34), LeftHip = A(70, 0, -24), RightHip = A(70, 0, 24),
+	            LeftKnee = A(-30), RightKnee = A(-30), Waist = A(-14, -24, 0)},                                                     -- stretching out to the next horse
+	ridereachL = {LeftShoulder = A(96, 0, -38), LeftElbow = A(4), RightShoulder = A(52, 0, 8), RightElbow = A(34), LeftHip = A(70, 0, -24), RightHip = A(70, 0, 24),
+	            LeftKnee = A(-30), RightKnee = A(-30), Waist = A(-14, 24, 0)},
+	headdown = {Neck = A(-24), Waist = A(-5)},
+	straight = {LeftShoulder = A(0, 0, 30), RightShoulder = A(0, 0, -30), LeftElbow = A(8), RightElbow = A(8)},                          -- arms hang at the sides (the AI rigs' A-pose rest holds them out)  [added 2026-11-24, Roll Call]
+	handup   = {RightShoulder = A(168, 0, -6), RightElbow = A(6), Neck = A(-4)},
+	-- The Gingerbread House (2026-11-26)
+	lookup   = {Neck = A(30), Waist = A(8)},
+	bitedown = {Waist = A(-34), Neck = A(-6), LeftShoulder = A(62, 0, -6), RightShoulder = A(62, 0, 6), LeftElbow = A(40), RightElbow = A(40)},
+	knockA   = {RightShoulder = A(112, 0, -6), RightElbow = A(96), LeftShoulder = A(86, 0, 8), LeftElbow = A(60), Waist = A(-6)},
+	knockB   = {RightShoulder = A(86, 0, -6), RightElbow = A(40), LeftShoulder = A(112, 0, 8), LeftElbow = A(96), Waist = A(-10)},                                                     -- right arm straight up: "here!" / a raised hand  [added 2026-11-24, Roll Call]                                                                         -- turns to look over the shoulder
 }
 -- server: K.pose("Sam", "pockets", 0.3); K.pose("Sam") releases. A pose stops the idle fidget (it would fight the arms).
 function K.pose(name, pose, fade)
 	local m = K.actor(name); if not m then return end
+	if pose and hidesFace(name, pose, K.ARM_POSES) then return end
 	if pose then K.noFidget(name) end
 	m:SetAttribute("PoseFade", fade or 0.3); m:SetAttribute("Pose", pose)
 	m:SetAttribute("PoseStamp", (m:GetAttribute("PoseStamp") or 0) + 1)
@@ -238,8 +280,11 @@ function K.clientPoses()
 	end
 	for _, m in ipairs(workspace.Cast:GetChildren()) do hook(m) end
 	workspace.Cast.ChildAdded:Connect(hook)
+	local turned = {}
 	RunService.PreSimulation:Connect(function(dt)
 		local t = os.clock()
+		local now, speaker = workspace:GetServerTimeNow(), nil
+		for _, m in ipairs(workspace.Cast:GetChildren()) do local u = m:GetAttribute("TalkUntil"); if u and now < u then speaker = m end end
 		for i, m in ipairs(workspace.Cast:GetChildren()) do
 			local J = jointsOf(m)
 			local st = state[m]
@@ -255,12 +300,28 @@ function K.clientPoses()
 			if J.Neck then J.Neck.Transform = J.Neck.Transform * A(math.sin(t * 0.6 + ph) * 2.2, math.noise(t * 0.25, ph) * 9, 0) end
 			if J.LeftShoulder then J.LeftShoulder.Transform = J.LeftShoulder.Transform * A(0, 0, -math.sin(t * 1.7 + ph) * 1.2) end
 			if J.RightShoulder then J.RightShoulder.Transform = J.RightShoulder.Transform * A(0, 0, math.sin(t * 1.7 + ph) * 1.2) end
+			-- planned talk-shot actions (fix 2026-11-26): listeners turn their heads to the talker, the talker nods and shifts
+			local want = 0
+			if speaker and speaker ~= m then
+				local a, b = m:FindFirstChild("HumanoidRootPart"), speaker:FindFirstChild("HumanoidRootPart")
+				if a and b and (b.Position - a.Position).Magnitude < 16 then
+					local rel = a.CFrame:PointToObjectSpace(b.Position)
+					local ang = math.deg(math.atan2(-rel.X, -rel.Z))
+					if math.abs(ang) < 110 then want = math.clamp(ang, -30, 30) end
+				end
+			end
+			turned[m] = (turned[m] or 0) + (want - (turned[m] or 0)) * math.min(1, dt * 4)
+			if J.Neck then J.Neck.Transform = J.Neck.Transform * A(0, turned[m], 0) end
+			if speaker == m then
+				if J.Neck then J.Neck.Transform = J.Neck.Transform * A(math.sin(t * 6.3) * 3.5, math.sin(t * 2.1) * 4, 0) end
+				if J.Waist then J.Waist.Transform = J.Waist.Transform * A(math.sin(t * 3.1) * 1.8 - 1.5, math.sin(t * 2.4) * 3.5, 0) end
+			end
 		end
 	end)
 end
 
 -- walk to a point at a speed (studs/s); plays walk then idle on arrival
--- studs/s at which each gait's feet match the ground at animation speed 1
+-- studs/s at which each gait's feet match the ground at animation speed 1 (user 2026-11-23: walks looked like sliding)
 -- shortcut: estimated, not measured; check one walk in Play (feet must not slide) on the next video and tune these two numbers
 K.STRIDE = {walk = 14, run = 24}
 
@@ -280,12 +341,25 @@ function K.turn(name, lookAt)
 	m:PivotTo(CFrame.lookAt(p, Vector3.new(lookAt.X, p.Y, lookAt.Z)))
 end
 
+-- Contact staging (fix 2026-11-25): two actors close enough to read as a hug / hand-over on a phone. `a` stands screen-left, `b` screen-right of
+-- `mid` as seen from `cam`, K.MIN_GAP apart, each turned 3/4 toward the other and the camera. Returns the two positions ({a = , b = }) without moving
+-- anyone when dry is true (use them as stage positions).
+function K.together(a, b, mid, cam, dry)
+	local f = Vector3.new(cam.X - mid.X, 0, cam.Z - mid.Z).Unit
+	local right = Vector3.new(0, 1, 0):Cross(f).Unit   -- screen-right for a camera looking along -f
+	local half = right * (K.MIN_GAP / 2 + 0.05)
+	local pa, pb = mid - half, mid + half
+	local la, lb = pa + (right + f).Unit * 6, pb + (f - right).Unit * 6
+	if not dry then K.place(a, pa, la); K.place(b, pb, lb) end
+	return {a = {pa, la}, b = {pb, lb}}
+end
+
 -- Faces are animated on the CLIENT (FaceControls don't replicate): the server only sets attributes.
 function K.face(name, preset, dur)
 	local m = K.actor(name)
 	if not m then return end
 	local ch = m:FindFirstChild("ClassicHead") -- drawn face: a server-side Decal swap replicates, no client work
-	if ch then if K.FACE_IMG[preset] then ch.face.Texture = "rbxassetid://" .. K.FACE_IMG[preset] end return end
+	if ch then if K.FACE_IMG[preset] then ch.face.Texture = "rbxassetid://" .. K.FACE_IMG[preset]; ch:SetAttribute("Base", K.FACE_IMG[preset]) end return end
 	if RunService:IsServer() then
 		m:SetAttribute("FaceDur", dur or 0.3); m:SetAttribute("Face", preset)
 		m:SetAttribute("FaceStamp", (m:GetAttribute("FaceStamp") or 0) + 1)
@@ -336,6 +410,22 @@ function K.clientFaces()
 			local untilT = m:GetAttribute("TalkUntil")
 			local head = m:FindFirstChild("Head")
 			local fc = head and head:FindFirstChildOfClass("FaceControls")
+			local ch = m:FindFirstChild("ClassicHead")
+			if ch and untilT then
+				-- CLASSIC avatars (2026-11-24): the drawn face flaps between its base face and an open mouth while talking (lip-sync clip loudness, else a sine)
+				local base = ch:GetAttribute("Base") or K.FACE_IMG.neutral
+				local open = false
+				if now < untilT then
+					local clip = LIPS[m:GetAttribute("TalkClip") or ""]
+					if clip then
+						local i = math.clamp(math.floor((now - m:GetAttribute("TalkStart")) * clip.fps) + 1, 1, #clip.v)
+						open = clip.v[i] > 0.16
+					else open = math.sin(now * 11) * math.sin(now * 4.3) > 0 end
+				end
+				local want = open and (K.OPEN_FACE[base] or K.FACE_IMG.laugh) or base
+				local cur = ch:GetAttribute("Shown")
+				if cur ~= want then ch.face.Texture = "rbxassetid://" .. want; ch:SetAttribute("Shown", want) end
+			end
 			if fc and untilT then
 				local clip = LIPS[m:GetAttribute("TalkClip") or ""]
 				if clip and now < untilT then
@@ -469,7 +559,7 @@ function K.shadow(name, opacity)
 	return S
 end
 
--- Keep a fake ground shadow under a moving actor, lagging `lag` seconds behind
+-- Keep a fake ground shadow under a moving actor, lagging `lag` seconds behind (Milo's "late" shadow)
 function K.lateShadow(name, lag)
 	local s = K.shadow(name, 0.7)
 	local hist = {}
@@ -489,12 +579,13 @@ function K.clearFX() for _, c in ipairs(FX:GetChildren()) do c:Destroy() end end
 -- every Light in the Set on/off (porch, lamps, windows)
 function K.lights(on, filter)
 	for _, d in ipairs(workspace.Set:GetDescendants()) do
-		if d:IsA("Light") and (not filter or d:GetFullName():find(filter)) then d.Enabled = on end
+		if d:IsA("Light") and (not filter or d:GetFullName():find(filter)) and not d:IsDescendantOf(workspace.Set.Kitchen) then d.Enabled = on end   -- the kitchen lamps stay on (they were switching on late and starting scenes dark)
 	end
 end
 
+
 ------------------------------------------------------------------ props for insert shots
--- A flat board with big readable text (street sign, poster, calendar page...).
+-- A flat board with big readable text (street sign, poster, calendar page, water-tower names...).
 -- cf = where the board's FRONT faces (CFrame.lookAt(boardPos, cameraSidePoint)); size = Vector3 (width, height, depth)
 -- opts: bg = Color3, fg = Color3, font = Enum.Font, material = Enum.Material, glow = bool, parent = Instance
 function K.sign(text, cf, size, opts)
@@ -520,7 +611,20 @@ function K.prop(name, cf, parent)
 	return m
 end
 
--- A framed photo of two actors (polaroid). darkName's figure renders black.
+
+-- Water tower: add fresh names (wet red paint) after the 31 old ones. K.towerNames({"A. REED"}) ; K.towerNames({}) resets.
+function K.towerNames(extra)
+	local lbl = workspace.Set:FindFirstChild("TowerNames") and workspace.Set.TowerNames:FindFirstChildWhichIsA("SurfaceGui"):FindFirstChild("Names")
+	if not lbl then return end
+	local base = lbl:GetAttribute("Base") or lbl.Text
+	lbl:SetAttribute("Base", base)
+	lbl.RichText = true
+	local t = base
+	for _, n in ipairs(extra or {}) do t ..= '   <font color="#D21E1E">' .. n .. "</font>" end
+	lbl.Text = t
+end
+
+-- A framed photo of two actors (polaroid). darkName's figure renders black ("Milo is just... dark").
 -- cf: board facing the camera; size: Vector3 (≈ 2.4 x 2.8 x 0.08)
 function K.photo(cf, size, leftName, rightName, darkName)
 	local p = Instance.new("Part"); p.Name = "Photo"; p.Anchored = true; p.CanCollide = false
@@ -550,7 +654,8 @@ function K.photo(cf, size, leftName, rightName, darkName)
 	return p
 end
 
--- Turn an actor pitch black and back. Server-side colour change replicates.
+
+-- Turn an actor pitch black (the "Milo is just... dark" photo) and back. Server-side colour change replicates.
 function K.darken(name, on)
 	for _, d in ipairs(K.actor(name):GetDescendants()) do
 		if d:IsA("BasePart") and d.Name ~= "HumanoidRootPart" then
@@ -565,9 +670,10 @@ function K.darken(name, on)
 	end
 end
 
--- LIGHTING LOOKS (top Shorts-bright by default; keep "night" for short climax beats only)
+
+-- LIGHTING LOOKS (bright by default; keep "night" for short climax beats only)
 K.LOOKS = {
-	-- day (3h): crisp midday, hard shadows, clear air, moving clouds (top Shorts-bright)
+	-- day (3h): crisp midday, hard shadows, clear air, moving clouds (bright)
 	day    = {clock = 13.2, bright = 3.2, exp = 0.2, amb = {100, 100, 108}, out = {135, 135, 145}, atm = {0.2, 0.0, {205, 220, 240}, {160, 180, 210}}, cc = {0.1, 0.22, {255, 253, 250}}, bloom = {0.08, 2.8}, soft = 0.05, clouds = 0.55},
 	golden = {clock = 16.7, bright = 2.8, exp = 0.35, amb = {145, 125, 112}, out = {190, 160, 145}, atm = {0.26, 0.9, {255, 214, 170}, {200, 150, 120}}, cc = {0.07, 0.18, {255, 242, 228}}, bloom = {0.15, 2.6}, soft = 0.08, clouds = 0.5, lift = 0.03},
 	sunset = {clock = 17.3, bright = 2.6, exp = 0.45, amb = {140, 118, 118}, out = {185, 150, 150}, atm = {0.3, 1.3, {255, 180, 140}, {190, 110, 120}}, cc = {0.08, 0.15, {255, 236, 222}}, bloom = {0.15, 2.6}, lift = 0.07},
@@ -575,10 +681,23 @@ K.LOOKS = {
 	night  = {clock = 18.4, bright = 1.6, exp = 0.55, amb = {120, 125, 165}, out = {140, 150, 195}, atm = {0.32, 0.6, {115, 130, 190}, {60, 70, 120}}, cc = {0.1, 0.05, {215, 225, 255}}, bloom = {0.1, 2.8}, lift = 0.12},
 	-- MOOD TRACK (2026-11-23 look test): one story-wide light plan, blended with K.look(name, seconds). No extra light objects:
 	-- mood comes from ambient, haze, clouds, bloom and grade only. Ambient never drops below ~80 so faces stay readable (CamFill does the rest).
-	calm      = {clock = 13.2, bright = 2.4, exp = -0.3, amb = {96, 96, 104}, out = {125, 125, 135}, atm = {0.24, 0.2, {205, 220, 240}, {160, 180, 210}}, cc = {0.12, 0.1, {255, 252, 246}}, bloom = {0.06, 2.8}, soft = 0.05, clouds = 0.6, lift = 0.04},
-	uneasy    = {clock = 15.2, bright = 2.2, exp = -0.3, amb = {100, 104, 124}, out = {118, 124, 148}, atm = {0.35, 1.0, {170, 180, 205}, {125, 135, 165}}, cc = {0.25, 0.1, {255, 246, 236}}, bloom = {0.2, 1.0}, soft = 0.15, clouds = 0.7, lift = 0.07},
-	scare     = {clock = 16.3, bright = 2.0, exp = -0.2, amb = {76, 82, 108}, out = {90, 98, 128}, atm = {0.42, 1.4, {150, 160, 188}, {110, 120, 150}}, cc = {0.3, 0.08, {255, 244, 232}}, bloom = {0.35, 0.95}, soft = 0.25, clouds = 0.9, lift = 0.08},
-	aftermath = {clock = 16.9, bright = 2.3, exp = -0.15, amb = {145, 125, 112}, out = {190, 160, 145}, atm = {0.26, 0.9, {255, 214, 170}, {200, 150, 120}}, cc = {0.12, 0.2, {255, 240, 225}}, bloom = {0.2, 1.4}, soft = 0.1, clouds = 0.3, lift = 0.06},
+	calm      = {clock = 13.2, bright = 2.4, exp = -0.12, amb = {104, 104, 112}, out = {125, 125, 135}, atm = {0.24, 0.2, {205, 220, 240}, {160, 180, 210}}, cc = {0.12, 0.1, {255, 252, 246}}, bloom = {0.06, 2.8}, soft = 0.05, clouds = 0.6, lift = 0.04},
+	uneasy    = {clock = 15.2, bright = 2.2, exp = -0.12, amb = {108, 112, 132}, out = {118, 124, 148}, atm = {0.35, 1.0, {170, 180, 205}, {125, 135, 165}}, cc = {0.25, 0.1, {255, 246, 236}}, bloom = {0.2, 1.0}, soft = 0.15, clouds = 0.7, lift = 0.07},
+	scare     = {clock = 16.3, bright = 2.0, exp = 0.0, amb = {90, 96, 122}, out = {90, 98, 128}, atm = {0.42, 1.4, {150, 160, 188}, {110, 120, 150}}, cc = {0.3, 0.08, {255, 244, 232}}, bloom = {0.35, 0.95}, soft = 0.25, clouds = 0.9, lift = 0.08},
+	aftermath = {clock = 16.9, bright = 2.3, exp = -0.05, amb = {145, 125, 112}, out = {190, 160, 145}, atm = {0.26, 0.9, {255, 214, 170}, {200, 150, 120}}, cc = {0.12, 0.2, {255, 240, 225}}, bloom = {0.2, 1.4}, soft = 0.1, clouds = 0.3, lift = 0.06},
+	-- FAIRGROUND (LOOK UPGRADE ticks 1+3, 2026-11-26): dusk, night and morning with shadows; lamps in the set are the visible sources.
+	-- LIGHT STABILITY : ONE look per story time, no moving clouds, the SAME colour grade in all three, a fixed face fill.
+	-- fill = the camera's face light (never 0 at night). bloom threshold >= 2.0: lamps glow, skin does not.
+	fair_dusk    = {clock = 17.85, bright = 2.2, exp = -0.26, amb = {112, 92, 122}, out = {150, 118, 140}, atm = {0.27, 1.3, {255, 168, 128}, {118, 78, 128}}, cc = {0.12, 0.12, {255, 244, 236}}, bloom = {0.3, 2.1}, soft = 0.2, clouds = 0, lift = 0.04, fill = 0.55},
+	fair_night   = {clock = 20.6, bright = 1.9, exp = -0.3, amb = {82, 84, 124}, out = {96, 104, 156}, atm = {0.26, 0.6, {52, 60, 116}, {24, 28, 64}}, cc = {0.12, 0.12, {255, 244, 236}}, bloom = {0.28, 2.15}, soft = 0.25, clouds = 0, lift = 0.04, fill = 0.7},
+	-- THE GINGERBREAD HOUSE (2026-11-26): golden winter afternoon -> snowy dusk with lamps; summer + night memories; the sky; the plate
+	gb_gold   = {clock = 15.9, bright = 2.5, exp = -0.42, amb = {128, 116, 112}, out = {166, 148, 138}, atm = {0.24, 0.7, {255, 218, 180}, {180, 150, 140}}, cc = {0.12, 0.14, {255, 245, 234}}, bloom = {0.12, 2.5}, soft = 0.12, clouds = 0, lift = 0.01, fill = 0.4},
+	gb_snow   = {clock = 17.55, bright = 2.1, exp = -0.68, amb = {118, 124, 158}, out = {140, 150, 190}, atm = {0.3, 1.1, {176, 188, 222}, {110, 120, 164}}, cc = {0.12, 0.08, {236, 240, 255}}, bloom = {0.25, 2.2}, soft = 0.25, clouds = 0, lift = 0.02, fill = 0.65},
+	gb_sky    = {clock = 17.55, bright = 1.9, exp = -0.34, amb = {110, 100, 140}, out = {128, 112, 156}, atm = {0.28, 1.4, {196, 150, 176}, {96, 70, 112}}, cc = {0.18, 0.1, {255, 236, 240}}, bloom = {0.25, 2.2}, soft = 0.25, clouds = 0, lift = 0.04, fill = 0.6},
+	gb_summer = {clock = 13.0, bright = 2.7, exp = -0.46, amb = {116, 116, 120}, out = {150, 150, 156}, atm = {0.22, 0.1, {200, 224, 250}, {150, 180, 220}}, cc = {0.12, 0.2, {255, 252, 244}}, bloom = {0.08, 2.7}, soft = 0.08, clouds = 0, lift = 0.0, fill = 0.35},
+	gb_night  = {clock = 20.4, bright = 1.8, exp = -0.26, amb = {84, 90, 130}, out = {100, 110, 160}, atm = {0.25, 0.5, {60, 70, 120}, {26, 30, 66}}, cc = {0.12, 0.1, {240, 244, 255}}, bloom = {0.3, 2.1}, soft = 0.25, clouds = 0, lift = 0.04, fill = 0.7},
+	gb_plate  = {clock = 15.4, bright = 2.5, exp = -0.66, amb = {130, 120, 130}, out = {160, 150, 160}, atm = {0.1, 0.0, {240, 224, 230}, {180, 150, 160}}, cc = {0.12, 0.14, {255, 246, 240}}, bloom = {0.1, 2.6}, soft = 0.15, clouds = 0, lift = 0.0, fill = 0.2},
+	fair_morning = {clock = 7.1, bright = 2.5, exp = -0.18, amb = {122, 114, 112}, out = {160, 146, 134}, atm = {0.28, 1.1, {255, 214, 176}, {190, 150, 140}}, cc = {0.12, 0.12, {255, 244, 236}}, bloom = {0.15, 2.4}, soft = 0.15, clouds = 0, lift = 0.02, fill = 0.4},
 }
 local function rgb(t) return Color3.fromRGB(t[1], t[2], t[3]) end
 function K.lookNow(name)
@@ -593,7 +712,8 @@ function K.lookNow(name)
 	local b = Lighting:FindFirstChildOfClass("BloomEffect")
 	if b then b.Intensity, b.Threshold = L.bloom[1], L.bloom[2] end
 	Lighting.ShadowSoftness = L.soft or 0.2
-	Lighting.GlobalShadows = false   -- no shadows anywhere (every look, instant or blended, ends here)
+	Lighting.GlobalShadows = true   -- user tick 1 (2026-11-26): shadows on (every look, instant or blended, ends here)
+	Lighting:SetAttribute("Fill", L.fill)
 	local cl = workspace.Terrain:FindFirstChildOfClass("Clouds") or Instance.new("Clouds", workspace.Terrain)
 	cl.Cover = L.clouds or 0; cl.Density = 0.7; cl.Color = Color3.fromRGB(255, 255, 255); cl.Enabled = (L.clouds or 0) > 0
 end
@@ -630,7 +750,7 @@ function K.look(name, dur)
 	end)
 end
 
--- STORY-FIRST SETS: a video lists the Set pieces it needs (SET_KEEP in its Part file);
+-- STORY-FIRST SETS (user 2026-11-23: "too much extra things"): a video lists the Set pieces it needs (SET_KEEP in its Part file);
 -- at Play start everything else in workspace.Set is moved to ServerStorage.Hidden. Play-only: the saved place is untouched.
 function K.declutter(keep)
 	local want = {}
@@ -644,7 +764,7 @@ function K.declutter(keep)
 	return hidden
 end
 
--- indoors: after K.look, take the blown-out sky look out of the room: lower exposure, no haze, almost no bloom
+-- indoors (the kitchen): after K.look, take the blown-out sky look out of the room: lower exposure, no haze, almost no bloom
 function K.interior()
 	K.cancelLook()
 	Lighting.ExposureCompensation = -0.15; Lighting.Brightness = 1.6
@@ -652,6 +772,7 @@ function K.interior()
 	local a = Lighting:FindFirstChildOfClass("Atmosphere"); if a then a.Density = 0; a.Haze = 0 end
 	local b = Lighting:FindFirstChildOfClass("BloomEffect"); if b then b.Intensity = 0.05; b.Threshold = 2.8 end
 end
+
 
 -- Keep waving (looping), speed 1 = friendly, 2.5+ = frantic "shooing a bird". speed 0 stops.
 function K.wave(name, speed)
@@ -688,6 +809,41 @@ function K.cloud(down, hold, up)
 	end)
 end
 
+
+------------------------------------------------------------------ Finders Keepers: the Lost and Found trunk
+-- open the lid to `deg` degrees (0 = shut, 12 = a crack, 75 = wide open) over dur seconds, about its back hinge
+function K.lid(deg, dur)
+	local lid = workspace.Set.SchoolYard.Trunk:FindFirstChild("Lid", true)
+	local closed, hinge = lid:GetAttribute("Closed"), lid:GetAttribute("Hinge")
+	local from = lid:GetAttribute("Deg") or 0
+	lid:SetAttribute("Deg", deg)
+	local rel = hinge:ToObjectSpace(closed)
+	local function at(a) lid.CFrame = hinge * CFrame.Angles(0, 0, math.rad(a)) * rel end
+	if not dur or dur <= 0 then at(deg) return end
+	local t0 = os.clock()
+	local c; c = RunService.Heartbeat:Connect(function()
+		local x = math.clamp((os.clock() - t0) / dur, 0, 1)
+		at(from + (deg - from) * (x * x * (3 - 2 * x)))
+		if x >= 1 then c:Disconnect() end
+	end)
+end
+
+-- the names painted on the lid: K.trunkNames({"BRODY K."}) adds fresh (still wet, glossy white) names; {} resets to the 31
+function K.trunkNames(extra)
+	local lid = workspace.Set.SchoolYard.Trunk:FindFirstChild("Lid", true)
+	local lbl = lid:FindFirstChild("Names", true)
+	if not (lbl and lbl:IsA("TextLabel")) then lbl = lid:FindFirstChild("Names"):FindFirstChild("Names") end
+	local t = lbl:GetAttribute("Base")
+	for _, n in ipairs(extra or {}) do t ..= '   <font color="#FFFFFF"><b>' .. n .. "</b></font>" end
+	lbl.Text = t
+end
+
+-- the lid's names board, for insert shots: its centre and the point 1 stud above it (camera side)
+function K.lidTop()
+	local lid = workspace.Set.SchoolYard.Trunk:FindFirstChild("Lid", true)
+	return lid.Position, lid.Position + Vector3.new(0.6, 1, 0)
+end
+
 -- sit an actor on a seat: hips at seatPos, facing lookAt. Anchored while seated; K.place frees them again.
 function K.sit(name, seatPos, lookAt)
 	K.stopSwing(name)
@@ -711,6 +867,20 @@ function K.swing(name, amp, period)
 	end)
 end
 function K.stopSwing(name) if swinging[name] then swinging[name]:Disconnect(); swinging[name] = nil end end
+
+-- porch bells (workspace.Set.Bells.<name>, a Part whose top is the hinge): K.ring(name, dur) swings it for dur seconds
+local bellBase = {}
+function K.ring(name, dur)
+	local b = workspace.Set:FindFirstChild("Bells") and workspace.Set.Bells:FindFirstChild(name)
+	if not b then warn("no bell " .. name) return end
+	bellBase[b] = bellBase[b] or b.CFrame
+	local base, hinge, t0 = bellBase[b], CFrame.new(0, b.Size.Y / 2, 0), os.clock()
+	local c; c = RunService.Heartbeat:Connect(function()
+		local t = os.clock() - t0
+		if t > (dur or 1.5) then c:Disconnect(); b.CFrame = base; return end
+		b.CFrame = base * hinge * CFrame.Angles(0, 0, math.sin(t * 16) * 0.55 * (1 - t / (dur or 1.5) * 0.5)) * hinge:Inverse()
+	end)
+end
 
 -- a prop from ServerStorage.Props welded into an actor's hand (cleared by K.clearFX / K.drop)
 function K.hold(name, propName, hand, offset)

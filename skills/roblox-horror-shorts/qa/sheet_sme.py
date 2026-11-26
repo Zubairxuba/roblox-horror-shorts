@@ -38,7 +38,7 @@ for si, (path, frm) in enumerate(segs):
     num, den = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=avg_frame_rate",
                               "-of", "csv=p=0", path], capture_output=True, text=True).stdout.strip().split("/")
     fps = float(num) / float(den or 1)
-    t0 = next(k for k, y in enumerate(ys) if y > 200) / fps + 0.5   # = story time `frm`
+    t0 = next(k for k, y in enumerate(ys) if y > 110) / fps + 0.5   # = story time `frm`
     print(f"{path}: story {frm:.0f}s starts at {t0:.2f}s, {W}x{H} @ {fps:.1f} fps, {dur:.1f}s")
     for b in allbeats:
         key = f"{b['line']}.{b['k']}"

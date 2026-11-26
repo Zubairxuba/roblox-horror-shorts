@@ -16,16 +16,27 @@ for _, m in ipairs(RS:WaitForChild("Parts"):GetChildren()) do
 	local ok, part = pcall(require, m)
 	if ok then for line, spec in pairs(part) do SPEC[line] = spec end end
 end
+if SPEC.CLIENT then task.spawn(SPEC.CLIENT) end   -- a part's own client effect (The Carousel: the spinning ride)
 local cam = workspace.CurrentCamera
 local KitC = require(RS:WaitForChild("Kit"))
 KitC.clientFaces()
 KitC.clientPoses()   -- story poses + breathing (Kit POSE LIBRARY)
--- IMPROVEMENT 2026-11-23: preload every drawn face, so the first shot with a new face never shows the previous one
+-- IMPROVEMENT 2026-11-23: preload every drawn face, so the first shot with a new face never shows the previous one (a frown on the pale kid's grin)
 task.spawn(function()
 	local list = {}
 	for _, id in pairs(KitC.FACE_IMG) do local d = Instance.new("Decal"); d.Texture = "rbxassetid://" .. id; list[#list + 1] = d end
 	pcall(function() game:GetService("ContentProvider"):PreloadAsync(list) end)
 end)
+-- fix (2026-11-26): keep every drawn face resident (a face used for the first time rendered blank): 2 px images in the far left corner, outside 9:16
+do
+	local g = Instance.new("ScreenGui"); g.Name = "FaceKeep"; g.IgnoreGuiInset = true; g.ResetOnSpawn = false
+	local i = 0
+	for _, id in pairs(KitC.FACE_IMG) do
+		local im = Instance.new("ImageLabel"); im.Size = UDim2.fromOffset(2, 2); im.Position = UDim2.new(0, 0, 1, -3 - i * 3); im.BackgroundTransparency = 1
+		im.ImageTransparency = 0.97; im.Image = "rbxassetid://" .. id; im.Parent = g; i += 1
+	end
+	g.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+end
 local Framer = require(RS:WaitForChild("Framer"))
 local CamLog = RS:WaitForChild("CamLog", 10)
 local function log(s) print(s); if CamLog then CamLog:FireServer(s) end end
@@ -34,7 +45,7 @@ local function log(s) print(s); if CamLog then CamLog:FireServer(s) end end
 local fill = Instance.new("Part"); fill.Name = "CamFill"; fill.Anchored = true; fill.CanCollide = false; fill.CanQuery = false; fill.Transparency = 1; fill.Size = Vector3.new(0.2, 0.2, 0.2); fill.Parent = workspace
 local fl = Instance.new("PointLight"); fl.Range = 12; fl.Brightness = 0.8; fl.Color = Color3.fromRGB(255, 214, 180); fl.Shadows = false; fl.Parent = fill
 -- depth of field: only on over-the-shoulder shots (the near shoulder goes soft)
--- foreground layer: a soft-focus bar at the edge of the 9:16 strip, riding in front of the lens (top Shorts hedges/fences/lockers). CanQuery=false: occlusion rays never see it.
+-- foreground layer: a soft-focus bar at the edge of the 9:16 strip, riding in front of the lens (hedges/fences/lockers). CanQuery=false: occlusion rays never see it.
 local fgp = Instance.new("Part"); fgp.Name = "CamFG"; fgp.Anchored = true; fgp.CanCollide = false; fgp.CanQuery = false; fgp.CanTouch = false; fgp.CastShadow = false
 fgp.Material = Enum.Material.SmoothPlastic; fgp.Size = Vector3.new(0.22, 4, 0.2); fgp.Transparency = 1; fgp.Parent = workspace
 local dof = Lighting:FindFirstChildOfClass("DepthOfFieldEffect") or Instance.new("DepthOfFieldEffect", Lighting)
@@ -111,7 +122,7 @@ local ALT = {eye_level = "three_quarter", three_quarter = "eye_level", low = "th
 local function choose(b, spec, c)
 	local bt = beatType(b, spec, c)
 	local c0 = c
-	do   -- TIGHT-SHOT BUDGET (41% close/extreme was too many): hook/scare/twist/ending keep their close-ups, the rest drop to medium when over budget
+	do   -- TIGHT-SHOT BUDGET (Picture Day was 41% close/extreme): hook/scare/twist/ending keep their close-ups, the rest drop to medium when over budget
 		local sz0 = Framer.effectiveSize(c)
 		BUDGET.n = BUDGET.n + 1
 		if (sz0 == "close" or sz0 == "extreme") and not c.actors then
@@ -170,15 +181,21 @@ local function choose(b, spec, c)
 	if not move then
 		if bt == "scare" and snap then move = "snap_zoom"
 		elseif bt == "scare" and scareIn(b.stop, b.stop + 0.35) then move = "hold"   -- the stillness before the scare
-		elseif bt == "clue" and (b.k or 1) == 1 and REVEAL(b.line) then move = "tilt_up"   -- top Shorts reveal: what they look at / point to
+		elseif bt == "clue" and (b.k or 1) == 1 and REVEAL(b.line) then move = "tilt_up"   -- reveal: what they look at / point to
 		elseif bt == "hook" or bt == "clue" then move = "push_in"
 		elseif bt == "ending" then move = "pull_out"
 		end
 	end
+	-- CALM CAMERA (optional, SPEC.CALM): no push-in by default. Walkers are followed (Framer), wides drift round, everything else holds with the handheld sway.
+	if SPEC.CALM and not c.move and type(c.push) ~= "number" and move ~= "snap_zoom" and move ~= "hold" and move ~= "tilt_up" then
+		local sz = Framer.effectiveSize(ctx.c or c)
+		move = (sz == "wide") and "orbit" or "static"
+		s = c.move_strength
+	end
 	-- top Shorts: long scare/clue shots push FAR (a wide house to the drain), not 6%
-	if move == "push_in" and not s and (bt == "scare" or bt == "clue" or bt == "twist") and ctx.dur >= 2.5 then s = 0.22 end
-	if not s and ctx.dur >= 1.5 and (move == "push_in" or (not move and Framer.effectiveSize(c) == "insert")) then s = 0.15 end
-	if not s and Framer.effectiveSize(c) == "insert" and (move == nil or move == "push_in") then s = 0.12 end   -- short inserts too (2026-11-23: inserts were half the frozen time)   -- a still object needs a real push to read as motion
+	if move == "push_in" and not s and (bt == "scare" or bt == "clue" or bt == "twist") and ctx.dur >= 2.5 then s = 0.16 end
+	if not s and not SPEC.CALM and ctx.dur >= 1.5 and (move == "push_in" or (not move and Framer.effectiveSize(c) == "insert")) then s = 0.11 end
+	if not s and not SPEC.CALM and Framer.effectiveSize(c) == "insert" and (move == nil or move == "push_in") then s = 0.09 end   -- short inserts too (2026-11-23: inserts were half the frozen time)   -- a still object needs a real push to read as motion
 	-- scares and the twist on a single person's close-up become a face-filling shot
 	if (bt == "scare" or bt == "twist") and c.frame == "close" and not c.actors and BUDGET.ext < 4 then ctx.c = table.clone(c); ctx.c.frame = "extreme"; BUDGET.ext = BUDGET.ext + 1 end
 	if move == "snap_zoom" then ctx.snapAt = snap or (b.start + (b.stop - b.start) * 0.5) end
@@ -188,7 +205,58 @@ local function choose(b, spec, c)
 	return ctx, bt
 end
 
+------------------------------------------------------------------------------------------------ face rack
+-- BLANK FACE FIX (user 2026-11-27: Mom's face was blank for about a second, then appeared): a drawn face used for the first time
+-- is not on the graphics card yet, even after PreloadAsync. Every face (plus each actor's current one) rides the camera as small
+-- 3D tiles in the LEFT margin of the landscape viewport, outside the 9:16 strip that becomes the video, so all stay resident.
+local rack = Instance.new("Model"); rack.Name = "FaceRack"; rack.Parent = workspace
+local tiles = {}
+local function addTile(tex)
+	if tiles[tex] then return end
+	local p = Instance.new("Part"); p.Anchored = true; p.CanCollide = false; p.CanQuery = false; p.CanTouch = false; p.CastShadow = false
+	p.Size = Vector3.new(0.2, 0.2, 0.05); p.Color = Color3.fromRGB(230, 200, 170); p.Parent = rack
+	local d = Instance.new("Decal"); d.Face = Enum.NormalId.Front; d.Texture = tex; d.Parent = p
+	tiles[tex] = p
+end
+for _, id in pairs(KitC.FACE_IMG) do addTile("rbxassetid://" .. id) end
+local function placeRack(cf, fov)
+	local vs = cam.ViewportSize
+	local aspect = vs.X / math.max(vs.Y, 1)
+	local d = 3
+	local halfH = math.tan(math.rad(fov / 2)) * d
+	local list = {}
+	for _, m in ipairs(workspace.Cast:GetChildren()) do   -- faces set by a line (custom ids too) join the rack as soon as they appear
+		local f = m:FindFirstChild("ClassicHead") and m.ClassicHead:FindFirstChild("face")
+		if f and f.Texture ~= "" then addTile(f.Texture) end
+	end
+	for _, p in pairs(tiles) do list[#list + 1] = p end
+	if aspect < 1.0 then for _, p in ipairs(list) do p.CFrame = CFrame.new(0, -500, 0) end return end
+	local x0 = -halfH * (0.5625 + aspect) / 2            -- halfway between the strip edge and the viewport edge
+	local size = halfH * 0.11
+	for i, p in ipairs(list) do
+		local col, row = (i - 1) % 4, math.floor((i - 1) / 4)
+		p.Size = Vector3.new(size, size, 0.02)
+		p.CFrame = cf * CFrame.new(x0 + (col - 1.5) * size * 1.15, halfH * 0.8 - row * size * 1.15, -d) * CFrame.Angles(0, math.pi, 0)
+	end
+end
+
 ------------------------------------------------------------------------------------------------ the render step
+-- FACE ROOM (user 2026-11-27: "camera is too close to face"): in EVERY shot, auto or hand-placed, a head in the 9:16 strip
+-- never fills more than this share of the frame height (hat included in the picture, chest visible). Too close = widen the lens.
+local MAX_HEAD = 0.28
+local function faceRoom(cf, fov)
+	for _, m in ipairs(workspace.Cast:GetChildren()) do
+		local h = m:FindFirstChild("ClassicHead")
+		if h then
+			local rel = cf:PointToObjectSpace(h.Position)
+			local d, half = -rel.Z, -rel.Z * math.tan(math.rad(fov / 2))
+			if d > 0.5 and math.abs(rel.X) < half * 0.5625 and math.abs(rel.Y) < half then
+				fov = math.max(fov, math.deg(2 * math.atan(h.Size.Y * 1.25 / (2 * d * MAX_HEAD))))
+			end
+		end
+	end
+	return math.min(fov, 75)
+end
 -- screen y (0 = top edge) of the highest head top among the shot's actors, from the current camera; 9 = no actor
 local function headTop(plan)
 	local y = 9
@@ -204,6 +272,7 @@ end
 local cur = nil   -- {key, plan, c, bt, peak, prev, m}
 local vpLogged = false
 local function finish(shot)
+	if shot and shot.bt == "keys" then log("[CAMKEY] " .. shot.key) end   -- fix (2026-11-26): hand-keyed shots count as shot beats in QA
 	if not shot or not shot.plan then return end
 	if not shot.m then shot.m = Framer.measure(cam, shot.plan) end
 	shot.htop = shot.htop or headTop(shot.plan)   -- very short shots: measure on their last frame
@@ -285,23 +354,29 @@ local function onRender(dt)
 		if cur.plan.jumped then cur.plan.jumped = nil; cur.prev = nil; log(string.format("[JUMP] %s t=%.3f", key, t)) end
 	else
 		pos, look, fov = sample(c, u)
+		-- fix (2026-11-26): a held keyframe still creeps in, so it never reads as a frozen frame
+		local p0, p1 = sample(c, 0), sample(c, 1)
+		if pos and (p1 - p0).Magnitude < 0.8 then pos = pos:Lerp(look, 0.06 * u) end
 	end
 	if not pos then return end
 	local cf = CFrame.lookAt(pos, look)
 	if roll and roll ~= 0 then cf = cf * CFrame.Angles(0, 0, math.rad(roll)) end
 	if cur.plan and cur.plan.ctx.handheld then   -- optional handheld sway (deterministic: noise of the timeline clock)
-		local a = (type(c.shake) == "number" and c.shake) or 0.003
+		local a = (type(c.shake) == "number" and c.shake) or 0.002   -- a third less sway (fix : picture too busy)
 		cf = cf * CFrame.Angles(math.noise(t * 1.7, 1.3) * a, math.noise(t * 1.7, 7.1) * a, 0)
 	end
 	local planned = cf.Position
-	cf = Framer.safe(cf, cur.plan and cur.plan.partner)
+	cf = Framer.safe(cf, cur.plan and cur.plan.partner, SPEC.CALM and cur.bt == "keys")
 	if (cf.Position - planned).Magnitude > 0.05 then cur.pushes = (cur.pushes or 0) + 1 end
 	cam.CFrame = cf
 	cam.Focus = CFrame.new(look)   -- docs: Scriptable cameras must set Focus or lights far from it may not render
+	fov = faceRoom(cf, fov)
 	cam.FieldOfView = fov
+	placeRack(cf, fov)
 	fill.CFrame = cf * CFrame.new(0.8, 0.6, -1.2)
 	local tightShot = cur.plan and (cur.plan.size == "close" or cur.plan.size == "extreme")
-	fl.Brightness = math.max(tightShot and 0.55 or 0, math.clamp((Lighting.Brightness - 1.4) / 1.8, 0, 1) * 0.8)   -- close-ups keep a readable face in dark moods (2026-11-23: Leo's smile went black)   -- fill follows the look: day 0.8, golden 0.5, dusk ~0, night 0 (no glowing faces)
+	local lookFill = Lighting:GetAttribute("Fill")   -- fairground looks set their own face light (night faces must read)
+	fl.Brightness = lookFill or math.max(tightShot and 0.55 or 0, math.clamp((Lighting.Brightness - 1.4) / 1.8, 0, 1) * 0.8)   -- close-ups keep a readable face in dark moods (2026-11-23: Leo's smile went black)   -- fill follows the look: day 0.8, golden 0.5, dusk ~0, night 0 (no glowing faces)
 	local pl = cur.plan
 	if pl and pl.dof then
 		dof.Enabled = true; dof.FocusDistance = pl.dof; dof.InFocusRadius = 4; dof.NearIntensity = 0.75; dof.FarIntensity = 0.05

@@ -42,6 +42,13 @@ for _, m in ipairs(RS.Parts:GetChildren()) do
 	if ok then for line, spec in pairs(part) do SPEC[line] = spec end else warn("part failed: " .. m.Name .. " " .. tostring(part)) end
 end
 
+K.closeBy = {}   -- line -> actors framed close/extreme in it (Kit skips arm-raising acting for them)
+for line, spec in pairs(SPEC) do
+	for _, b in ipairs(type(line) == "number" and spec.beats or {}) do
+		if (b.frame == "close" or b.frame == "extreme") and b.actor then K.closeBy[line] = K.closeBy[line] or {}; K.closeBy[line][b.actor] = true end
+	end
+end
+
 if SPEC.SET_KEEP then K.declutter(SPEC.SET_KEEP) end   -- story-first set: only what this video needs
 
 for _, m in ipairs(workspace.Cast:GetChildren()) do
@@ -49,6 +56,7 @@ for _, m in ipairs(workspace.Cast:GetChildren()) do
 	if root then root.Anchored = true end   -- parked actors stay anchored; K.place makes them physical when a scene uses them
 	K.anim(m.Name, "idle", 0)
 end
+if K.actor("Milo") then K.castShadow("Milo", false) end -- Milo never has a shadow (he is not in every cast)
 
 local function shotAt(t) for _, s in ipairs(T.shots) do if t < s.stop then return s end end end
 

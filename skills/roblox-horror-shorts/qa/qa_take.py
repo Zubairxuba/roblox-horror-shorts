@@ -42,7 +42,7 @@ for r in rows:
     v2 = "safe916" in r
     if v2:
         if r.get("safe916") == "0": why.append("outside 9:16 safe region")
-        fmax = {"extreme": 0.6, "close": 0.4}.get(size, 0.16)   # close/extreme are tight on purpose (top Shorts, )
+        fmax = {"extreme": 0.6, "close": 0.4}.get(size, 0.16)   # close/extreme are tight on purpose (top Shorts)
         if size != "insert" and num(r, "face") > fmax: why.append(f"face {num(r, 'face'):.2f} > {fmax}")
         ht = num(r, "htop", num(r, "ny") - num(r, "face") / 2)
         if size not in ("insert", "extreme") and num(r, "face") >= 0 and ht < 0.01: why.append(f"head cut off (top y {ht:.2f})")
@@ -92,18 +92,40 @@ out = subprocess.run(["ffmpeg", "-i", take, "-vf", "crop='min(iw,ih*9/16)':ih,fp
 ys10 = [float(x) for x in re.findall(r"YAVG=([\d.]+)", out)]
 ys = ys10[::5]
 beats = next((p for p in (os.path.join(os.path.dirname(os.path.abspath(logf)), "..", "beats.json"), "beats.json") if os.path.exists(p)), None)
-if beats:  # backlog B (2026-11-24): a beat with no [CAMQA] line never got a camera (unreplicated first-beat prop) and froze on the old shot
-    missing = [f"{b['line']}.{b['k']}" for b in json.load(open(beats)) if f"{b['line']}.{b['k']}" not in {r["key"] for r in rows}]
+if beats:  # fix (2026-11-24): a beat with no [CAMQA] line never got a camera (unreplicated first-beat prop) and froze on the old shot
+    logged = {r["key"] for r in rows} | set(re.findall(r"\[CAMKEY\] (\S+)", open(logf).read()))   # keyframe shots log [CAMKEY]
+    missing = [f"{b['line']}.{b['k']}" for b in json.load(open(beats)) if f"{b['line']}.{b['k']}" not in logged]
     if missing: print(f"FAIL: {len(missing)} beats have no camera line: {' '.join(missing)}"); ok = False
 if beats and ys10:
     start ={f"{b['line']}.{b['k']}": b["start"] for b in json.load(open(beats))}
-    t0 = next((i for i, y in enumerate(ys10) if y > 200), -5) / 10 + 0.5   # no flash (an assembled video): story starts at 0
+    t0 = next((i for i, y in enumerate(ys10) if y > 110), -5) / 10 + 0.5   # no flash (an assembled video): story starts at 0
     dark = []
     for r in rows:
         if r["key"] not in start: continue
         i = round((t0 + start[r["key"]]) * 10); w = ys10[i:i + 5]
         if len(w) == 5 and sum(w) / 5 < 40: dark.append(f"  {r['key']:6s} {r['size']:7s} {r['who']:10s} opens dark: luma {sum(w) / 5:.0f} in its first 0.5 s (take {i / 10:.1f}s)")
     if dark: print("FAIL:\n" + "\n".join(dark)); ok = False
+# blank frames (2026-11-24, user: a blank screen for a second): >= 0.25 s of almost no picture (camera inside a wall/locker/step): FAIL
+try:
+    import numpy as np
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", take, "-vf", "crop='min(iw,ih*9/16)':ih,fps=10,scale=54:96,format=gray", "-f", "rawvideo", "-"], capture_output=True).stdout
+    fr = np.frombuffer(raw[: len(raw) // 5184 * 5184], np.uint8).reshape(-1, 96, 54).reshape(-1, 5184)
+    flat = (fr.std(1) < 12) | (fr.mean(1) < 8)
+    if beats: bstart = sorted((b["start"], f"{b['line']}.{b['k']}") for b in json.load(open(beats)))
+    t0b = next((i for i, y in enumerate(ys10) if y > 110), -5) / 10 + 0.5
+    i = 0
+    while i < len(flat):
+        if flat[i]:
+            j = i
+            while j < len(flat) and flat[j]: j += 1
+            tt = i / 10 - t0b
+            if (j - i) >= 3 and tt > 0.3:
+                where = next((k for s0, k in reversed(bstart) if s0 <= tt), "?") if beats else "?"
+                print(f"FAIL: blank screen {(j - i) / 10:.1f} s at story {tt:.1f}s (beat {where}): the camera is inside something"); ok = False
+            i = j
+        else: i += 1
+except ImportError:
+    pass
 story = [y for y in ys if y > 3][2:]
 if story:
     avg = sum(story) / len(story)

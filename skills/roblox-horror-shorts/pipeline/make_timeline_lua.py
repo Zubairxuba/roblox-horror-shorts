@@ -5,7 +5,7 @@ cuts every ~1.2 s). Agents then give each beat its own camera."""
 import json, re
 from pathlib import Path
 
-TARGET, MIN_BEAT, MAX_BEAT = 1.05, 0.7, 1.5  # top Shorts cut every 1.15-1.5 s
+TARGET, MIN_BEAT, MAX_BEAT = 1.05, 0.7, 1.5  # top Shorts cut every 1.15-1.5 s (1.2/0.7/1.9 gave 1.6 s real)
 HERE = Path.cwd()
 shots = json.loads((HERE / "shots.json").read_text())
 ev = json.loads((HERE / "events.json").read_text())
@@ -13,8 +13,20 @@ words = json.loads((HERE / "words_full.json").read_text())  # {line: [[word, t_f
 lines = [l.replace("*", "").strip() for l in (HERE / "script.txt").read_text().splitlines() if l.strip()]
 
 
+# CALM CAMERA (optional): a project's optional pace.json = {"hook": 3, "calm": [target, min, max], "long": [lines], "longpace": [target, min, max]}.
+# The hook lines stay fast; the rest hold ~2 s; "long" lines (wides, follows) hold up to ~4 s. No pace.json = the old fast pacing.
+PACE = json.loads((HERE / "pace.json").read_text()) if (HERE / "pace.json").exists() else None
+
+
+def pace(line):
+    if not PACE or line <= PACE["hook"]:
+        return TARGET, MIN_BEAT, MAX_BEAT
+    return tuple(PACE["longpace"] if line in PACE["long"] else PACE["calm"])
+
+
 def cuts_for(s):
     """Times (full timeline) where this line's shot is cut into beats."""
+    TARGET, MIN_BEAT, MAX_BEAT = pace(s["line"])
     start, stop = s["start"], s["end"]
     ws = words.get(str(s["line"]), [])
     script_ws = lines[s["line"] - 1].split()

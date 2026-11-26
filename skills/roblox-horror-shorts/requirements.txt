@@ -2,3 +2,4 @@
 chatterbox-tts
 soundfile
 numpy
+pillow

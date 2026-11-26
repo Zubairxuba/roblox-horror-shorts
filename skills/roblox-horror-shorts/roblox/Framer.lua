@@ -1,4 +1,4 @@
--- Framer v2 (2026-11-21): shot composition + camera moves (client side, used by DirectorCam).
+-- Framer v2 (2026-11-21): shot composition + camera moves for Roblox Shorts (client side, used by DirectorCam).
 --
 -- Vertical-first: every shot is composed for the 9:16 centre strip of the recording, and kept clean for the 16:9
 -- crop too (that crop drops the top ~8.5% to hide Roblox's corner buttons, so headroom is 13%).
@@ -18,11 +18,11 @@ F.SPEED_CAP = 6                 -- studs/s of camera travel inside a shot (snap_
 F.FOV_MIN, F.FOV_MAX = 35, 70
 
 -- frac = subject height / frame height. face = head height / frame height, when set it decides the framing
---.
+-- (user 2026-11-23: match top Shorts: close = chest-up, extreme = the face fills the frame, for scares/twist).
 F.SHOT = {
 	extreme = {frac = 0.72, fov = 40, eye = 0.0, move = "push_in", face = 0.45},   -- narrow lens: keeps the lens >= MIN_DIST from the face
 	close  = {frac = 0.72, fov = 55, eye = 0.0,  move = "push_in", face = 0.30},
-	medium = {frac = 0.57, fov = 58, eye = -0.3, move = "push_in"},  -- no still shots
+	medium = {frac = 0.57, fov = 58, eye = -0.3, move = "push_in"},  -- no still shots (user 2026-11-23: ~30% frozen frames vs ~1% for top Shorts)
 	full   = {frac = 0.44, fov = 60, eye = -0.6, move = "orbit"},
 	wide   = {frac = 0.23, fov = 65, eye = 2.5,  move = "orbit"},   -- a pull-out barely changes a far frame (dry run 2026-11-23: 1.7 s frozen); orbit parallax reads
 	insert = {frac = 0.55, fov = 50, eye = 0.0,  move = "push_in"},
@@ -85,6 +85,7 @@ local function rayParams(models)
 	for _, m in ipairs(models) do table.insert(ex, m) end
 	local fx = workspace:FindFirstChild("FX"); if fx then table.insert(ex, fx) end
 	local fill = workspace:FindFirstChild("CamFill"); if fill then table.insert(ex, fill) end
+	local rack = workspace:FindFirstChild("FaceRack"); if rack then table.insert(ex, rack) end
 	rp.FilterDescendantsInstances = ex; rp.FilterType = Enum.RaycastFilterType.Exclude
 	return rp
 end
@@ -602,7 +603,7 @@ end
 
 ------------------------------------------------------------------------------------------------ safety
 -- keep the lens out of every face (hand-made moves included) and above the ground; `ignore` = the ots partner
-function F.safe(cf, ignore)
+function F.safe(cf, ignore, noGround)   -- noGround: a hand-placed camera under a canopy must not be lifted onto it
 	local pos, back = cf.Position, -cf.LookVector
 	for _, m in ipairs(workspace.Cast:GetChildren()) do
 		local h = m.Name ~= ignore and m:FindFirstChild("Head")
@@ -612,7 +613,7 @@ function F.safe(cf, ignore)
 		end
 	end
 	local hit = workspace:Raycast(pos + Vector3.new(0, 6, 0), Vector3.new(0, -12, 0), rayParams({}))
-	if hit and pos.Y < hit.Position.Y + 0.7 then pos = Vector3.new(pos.X, hit.Position.Y + 0.7, pos.Z) end
+	if not noGround and hit and pos.Y < hit.Position.Y + 0.7 then pos = Vector3.new(pos.X, hit.Position.Y + 0.7, pos.Z) end
 	return CFrame.lookAt(pos, pos + cf.LookVector, cf.UpVector)
 end
 
@@ -662,7 +663,7 @@ function F.measure(cam, plan)
 		r.top = ty
 		local torso = i.head - Vector3.new(0, 1.6, 0)
 		pts = {Vector3.new(i.head.X, i.top, i.head.Z), i.head + right * 0.7, i.head - right * 0.7, torso + right * 1.1, torso - right * 1.1}
-		if plan.size == "extreme" or plan.size == "close" then pts = {Vector3.new(i.head.X, i.top, i.head.Z), i.head + right * 0.6, i.head - right * 0.6} end   -- face / chest-up shot: only the head must fit (chest-up crops the shoulders by design; backlog #9)
+		if plan.size == "extreme" or plan.size == "close" then pts = {Vector3.new(i.head.X, i.top, i.head.Z), i.head + right * 0.6, i.head - right * 0.6} end   -- face / chest-up shot: only the head must fit (chest-up crops the shoulders by design)
 		for k = 2, #names do
 			local o = actorModel(names[k])
 			if o then local oi = F.info(o); table.insert(pts, oi.head + right * 0.7); table.insert(pts, oi.head - right * 0.7) end

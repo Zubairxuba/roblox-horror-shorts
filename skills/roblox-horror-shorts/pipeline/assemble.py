@@ -2,8 +2,10 @@
 
   assemble.py audio   # events.json -> SFX (Sonniss library if present, else synthesized) + polished voice -> final/full_audio.wav
   assemble.py video   # final/take.mp4 (screen recording, starts black, one white sync flash 0.5 s before t=0) -> full_video.mp4
+                      # (one-word captions burned in from words_full.json; CAPTIONS=0 to skip)
+  assemble.py music   # full_video.mp4 + final/score.wav (score.py) -> full_video_with_music.mp4, score ducked under the voice
 """
-import json, os, subprocess, sys
+import json, os, re, subprocess, sys
 from pathlib import Path
 
 sys.path.insert(0, os.environ.get("SHORTS_PIPELINE", str(Path(__file__).resolve().parent)))  # pipeline/ folder (finish.py)
@@ -46,6 +48,9 @@ NEW_SFX = {
     "bell": (1.6, "aevalsrc='0.45*(sin(2*PI*1180*t)+0.6*sin(2*PI*2950*t)+0.3*sin(2*PI*4410*t))*exp(-mod(t,0.19)*14)*exp(-t*1.2)'", "highpass=f=500,aecho=0.6:0.4:60:0.25"),
     "bellfar": (2.4, "aevalsrc='0.3*(sin(2*PI*990*t)+0.6*sin(2*PI*2480*t))*exp(-mod(t,0.23)*11)*exp(-t*0.8)+0.25*(sin(2*PI*1340*t)+0.5*sin(2*PI*3350*t))*exp(-mod(t+0.1,0.27)*11)*exp(-t*0.8)'", "highpass=f=500,lowpass=f=4500,aecho=0.8:0.7:120|260:0.4|0.3"),
     "bite": (0.4, "aevalsrc='0.9*(random(0)-0.5)*(exp(-t*30)+0.6*exp(-abs(t-0.12)*40))*gt(random(1),0.35)'", "bandpass=f=2600:width_type=h:w=3200"),
+    "dong": (2.2, "aevalsrc='0.7*(sin(2*PI*392*t)+0.55*sin(2*PI*784*t)+0.3*sin(2*PI*1176*t)+0.2*sin(2*PI*1568*t))*exp(-t*2.1)'", "aecho=0.6:0.5:90:0.3"),
+    "rip": (0.4, "aevalsrc='(random(0)-0.5)*(0.7+0.3*sin(2*PI*110*t))*exp(-t*7)'", "highpass=f=900"),
+    "slurp": (0.9, "aevalsrc='(0.45*(random(0)-0.5)+0.55*sin(2*PI*(1100-850*t)*t))*sin(PI*t/0.9)'", "bandpass=f=900:width_type=h:w=1100"),
     "crackle": (None, "aevalsrc='0.5*(random(0)-0.5)*gt(random(1),0.9975)+0.04*(random(2)-0.5)'", "bandpass=f=2500:width_type=h:w=3000"),
 }
 
@@ -149,36 +154,84 @@ def flash_time(take):
     """Seconds into the recording where the white sync flash starts (story t = flash + 0.5)."""
     r = subprocess.run([F.FF, "-i", take, "-vf", "scale=27:48,signalstats,metadata=print:key=lavfi.signalstats.YAVG", "-f", "null", "-"],
                        capture_output=True, text=True).stderr
-    import re
     ys = [float(x) for x in re.findall(r"YAVG=([\d.]+)", r)]
     i = next(k for k, y in enumerate(ys) if y > 200)
     return i / FPS
 
 
-# The take is Studio's WHOLE landscape viewport (3144x1932). Two outputs are cut from it:
-#   full_video.mp4    9:16 Short = the centre strip the camera framed for (1080x1920)
-#   full_video_16x9.mp4  16:9 long-format = full width, starting below Roblox's corner buttons (1920x1080)
+# The take is Studio's WHOLE landscape viewport. The Short is the centre 9:16 strip the camera framed for, exported at 1440x2560
+# (YouTube gives 1440p+ uploads a better codec and more bitrate).
 def crops(take):
-    """Both crops computed from the take's real resolution (the camera composes for the same strip, from ViewportSize)."""
+    """The 9:16 crop computed from the take's real resolution (the camera composes for the same strip, from ViewportSize)."""
     W, H = map(int, subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
                                     "-of", "csv=p=0", take], capture_output=True, text=True).stdout.strip().split(",")[:2])
-    sw = round(H * 9 / 16) // 2 * 2                     # 9:16 strip: centred, full height
-    sh = round(W * 9 / 16) // 2 * 2                     # 16:9: full width, bottom-aligned (drops Roblox's corner buttons)
-    if sh > H:                                          # viewport too wide for a full-width 16:9 (4096x2014): centre crop, full height
-        cw = round(H * 16 / 9) // 2 * 2
-        c169 = f"crop={cw}:{H}:{(W - cw) // 2}:0,scale=1920:1080:flags=lanczos"
-    else:
-        c169 = f"crop={W}:{sh}:0:{H - sh},scale=1920:1080:flags=lanczos"
-    return {"full_video.mp4": f"crop={sw}:{H}:{(W - sw) // 2}:0,scale=1080:1920:flags=lanczos",
-            "full_video_16x9.mp4": c169}
+    # Studio's Play-mode device toolbar ("Current device / Wifi / Auto") can sit on top of the viewport: the viewport is the BOTTOM
+    # [CAMVP] h x2 rows of the take; crop the toolbar and the 2 px selection border off (the camera framed the strip for the viewport height)
+    log = HERE / "qa" / "camlog.txt"
+    m = re.search(r"\[CAMVP\] (\d+) (\d+)", log.read_text()) if log.exists() else None
+    vh = int(m.group(2)) * 2 if m else H
+    off = H - vh if H - vh > 8 else 0
+    Hs = H - off - (8 if off else 0)
+    sw = round(Hs * 9 / 16) // 2 * 2
+    return {"full_video.mp4": f"crop={sw}:{Hs}:{(W - sw) // 2}:{off + (4 if off else 0)},scale=1440:2560:flags=lanczos"}
+
+
+NUMBERS = {"one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"}   # numbers get a coloured caption
+
+
+def captions():
+    """ONE-WORD CAPTIONS: each spoken word alone, lower middle of the 1440x2560 frame, timed from words_full.json (never raw Whisper)."""
+    words = json.loads((HERE / "words_full.json").read_text())
+    lines = [l.strip() for l in (HERE / "script.txt").read_text().splitlines() if l.strip()]
+    flat = []   # (start, line speech end, shown word)
+    for sh in shots:
+        n = sh["line"]; toks = lines[n - 1].replace("*", "").split(); ws = words[str(n)]
+        assert len(toks) == len(ws), f"line {n}: {len(toks)} script words, {len(ws)} timed"
+        end = sh["start"] + sh["lead"] + (sh["say"][1] - sh["say"][0])
+        flat += [(t, end, tok.strip('",.:;')) for tok, (_, t) in zip(toks, ws)]
+
+    def ts(t):
+        c = max(0, round(t * 100))
+        return f"{c // 360000}:{c // 6000 % 60:02d}:{c // 100 % 60:02d}.{c % 100:02d}"
+
+    head = """[Script Info]
+ScriptType: v4.00+
+PlayResX: 1440
+PlayResY: 2560
+WrapStyle: 2
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: W,Arial Black,138,&H00FFFFFF,&H00FFFFFF,&H00101010,&H90000000,-1,0,0,0,100,100,0,0,1,11,5,2,60,60,720,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+    out = []
+    for i, (t, end, w) in enumerate(flat):
+        stop = min(end + 0.12, flat[i + 1][0] if i + 1 < len(flat) else end + 0.4, t + 1.0)
+        colour = "{\\c&H3CE6FF&}" if w.lower().strip("?!") in NUMBERS else ""
+        out.append(f"Dialogue: 0,{ts(t)},{ts(max(stop, t + 0.08))},W,,0,0,0,,{{\\fscx118\\fscy118\\t(0,90,\\fscx100\\fscy100)}}{colour}{w.upper()}")
+    f = FIN / "captions.ass"
+    f.write_text(head + "\n".join(out) + "\n")
+    return f
+
+
+# Picture lags the audio clock by a fixed amount (measured 0.22-0.40 s on different takes). After assembly, compare the scene-cut
+# times with beats.json: the median lag must be ~0 (within +-0.05 s). If not, change SYNC_LAG (env) and re-run "video".
+SYNC_LAG = float(os.environ.get("SYNC_LAG", "0.40"))
 
 
 def video():
-    import re
     take = FIN / "take.mp4"
-    t0 = flash_time(take) + 0.5 + 0.22   # measured: picture lags the audio clock by 0.22 s (median over 71 cuts)
+    cap = captions() if os.environ.get("CAPTIONS", "1") != "0" else None
+    if cap and " ass " not in subprocess.run([F.FF, "-hide_banner", "-filters"], capture_output=True, text=True).stdout:
+        print("WARNING: captions skipped: this ffmpeg has no libass. Install one that has it (macOS: brew install ffmpeg-full) "
+              "and set FFMPEG=/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg, then re-run video.")
+        cap = None
+    t0 = flash_time(take) + 0.5 + SYNC_LAG
     end = END_F / FPS
-    look = "vignette=PI/6,noise=alls=3:allf=t,eq=contrast=1.04:saturation=1.05,format=yuv420p"
+    look = "vignette=PI/10,eq=contrast=1.04:saturation=1.05,format=yuv420p"   # no film grain: YouTube turns it into blotches
     # BLINK FIX: DirectorCam logs "[REPLAN] key cut=<s> t=<s>" when a shot's first frames aimed at a stale spot.
     # Replace those frames with the first good one (freezeframes), so nothing flashes at the cut.
     log = FIN.parent / "qa" / "camlog.txt"   # written by DirectorCam v2 through the bridge
@@ -191,18 +244,28 @@ def video():
                 fixes.append((a, b))
     print(f"blink fix: {len(fixes)} cut(s) cleaned")
     for name, crop in crops(take).items():
-        if name != "full_video.mp4": continue   # Shorts only
         g, cur = [], "[0:v]"
         for i, (a, b) in enumerate(fixes):
             g.append(f"{cur}split[x{i}][y{i}];[x{i}][y{i}]freezeframes=first={a}:last={b}:replace={b + 1}[f{i}]")
             cur = f"[f{i}]"
-        g.append(f"{cur}{crop},{look}[vout]")
+        g.append(f"{cur}{crop},{look}" + (f",ass={cap}" if cap else "") + "[vout]")
         F.run([F.FF, "-y", "-ss", f"{t0:.3f}", "-t", f"{end:.3f}", "-i", take, "-i", FIN / "full_audio.wav",
                "-filter_complex", ";".join(g), "-map", "[vout]", "-map", "1:a", "-r", str(FPS),
-               "-c:v", "libx264", "-preset", "slow", "-crf", "17",
+               "-c:v", "libx264", "-preset", "slow", "-crf", "15",
                "-c:a", "aac", "-b:a", "192k", "-ar", str(SR), "-t", f"{end:.3f}", "-movflags", "+faststart", HERE / name])
         print(HERE / name, f"story starts {t0:.2f}s into the take, {end:.2f}s long")
 
 
+def music():
+    """Score about 13 dB under the voice, side-chain ducked (a -10 dB / 4:1 mix left it inaudible). If the timeline has
+    heart_on/heart_off, make sure score.py does not also play a pulse there (two heartbeats at once)."""
+    F.run([F.FF, "-v", "error", "-y", "-i", HERE / "full_video.mp4", "-i", FIN / "score.wav", "-filter_complex",
+           "[0:a]asplit=2[v][sc];[1:a]volume=-3dB[m];[m][sc]sidechaincompress=threshold=0.1:ratio=2:attack=20:release=300[d];"
+           "[v][d]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.89:level=disabled[a]",
+           "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "256k", "-ar", str(SR), "-movflags", "+faststart",
+           HERE / "full_video_with_music.mp4"])
+    print(HERE / "full_video_with_music.mp4")
+
+
 if __name__ == "__main__":
-    {"audio": audio, "video": video}[sys.argv[1]]()
+    {"audio": audio, "video": video, "music": music}[sys.argv[1]]()

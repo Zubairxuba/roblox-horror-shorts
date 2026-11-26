@@ -1,7 +1,7 @@
 {
   "name": "roblox-horror-shorts",
-  "version": "0.1.0",
-  "description": "Story idea -> finished vertical animated horror Short filmed in Roblox Studio through the Roblox Studio MCP: script, voice, synced timeline, AI actors with moving faces and lip sync, automatic 9:16 camera with QA, screen-recorded take, SFX and upload notes.",
+  "version": "0.2.0",
+  "description": "Story idea -> finished vertical animated horror Short filmed in Roblox Studio through the Roblox Studio MCP: hook-first script with a lint, voice, synced timeline, classic blocky actors with drawn faces, a textured starter set, automatic 9:16 camera with QA, rehearsal review, guarded screen-recorded take, SFX, original score, captions and upload notes.",
   "license": "MIT",
   "keywords": [
     "roblox",
